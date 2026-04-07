@@ -486,7 +486,7 @@ export function Chat() {
                 : isServerBusy
                 ? "GitTalk AI is experiencing high traffic right now. All available slots are currently in use.\n\n\u2022 Please try again in a minute or two\n\u2022 Slots free up when users disconnect\n\u2022 This is temporary"
                 : isKeysExhausted
-                ? "GitTalk AI is temporarily down! We are actively working on a fix and it will be up soon!\n\nIn the meantime:\n\n\u2022 Check X.com for updates\n\u2022 Try again in a few minutes\n\u2022 Consider starring the project on GitHub to stay updated"
+                ? "We're experiencing very high demand and all AI capacity is currently in use.\n\n\u2022 Please try again in 5-10 minutes\n\u2022 This happens during peak usage and resolves quickly\n\u2022 Your conversation is saved — just come back later"
                 : "Unable to establish connection to the repository. This could be due to:\n\n\u2022 Server connectivity issues\n\u2022 Repository access restrictions\n\u2022 Temporary service disruption"}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">

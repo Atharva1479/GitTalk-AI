@@ -190,28 +190,35 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
           // Chat-phase errors — show as toast notification
           if (data === 'error:timeout') {
-            setErrorMessage('Response timed out. Please try a simpler question.');
+            setErrorMessage('The AI took too long to respond. Try asking a shorter or simpler question.');
             setStatusMessage(null);
             setIsStreaming(false);
             setStreamingContent(null);
             return;
           }
           if (data === 'error:keys_exhausted') {
-            setErrorMessage('Service temporarily unavailable. Please try again in a few minutes.');
+            setErrorMessage('We\'re experiencing high demand right now. Please try again in 5-10 minutes.');
             setStatusMessage(null);
             setIsStreaming(false);
             setStreamingContent(null);
             return;
           }
-          if (data === 'error:generation_failed' || data === 'error:retrieval_failed') {
-            setErrorMessage('Something went wrong. Please try again.');
+          if (data === 'error:generation_failed') {
+            setErrorMessage('The AI couldn\'t generate a response. Please try rephrasing your question.');
+            setStatusMessage(null);
+            setIsStreaming(false);
+            setStreamingContent(null);
+            return;
+          }
+          if (data === 'error:retrieval_failed') {
+            setErrorMessage('Couldn\'t search the codebase. Please try again in a moment.');
             setStatusMessage(null);
             setIsStreaming(false);
             setStreamingContent(null);
             return;
           }
           if (data === 'error:indexing_failed') {
-            setErrorMessage('Failed to build knowledge base. Please try again.');
+            setErrorMessage('Failed to build the knowledge base for this repo. Please try again.');
             setStatusMessage(null);
             setIsProcessing(false);
             connectingRef.current = false;

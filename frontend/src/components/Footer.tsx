@@ -32,8 +32,8 @@ export function Footer() {
           <div>
             <h4 className="font-semibold text-sm mb-4 text-slate-300">Resources</h4>
             <ul className="flex flex-col gap-2">
-              <li><a href="https://github.com/Atharva1479/GTA" target="_blank" rel="noopener noreferrer" className="text-slate-400 text-sm hover:text-white transition-colors">GitHub</a></li>
-              <li><a href="https://github.com/Atharva1479/GTA/issues/new" target="_blank" rel="noopener noreferrer" className="text-slate-400 text-sm hover:text-white transition-colors">Report an Issue</a></li>
+              <li><a href="https://github.com/Atharva1479/GitTalk-AI" target="_blank" rel="noopener noreferrer" className="text-slate-400 text-sm hover:text-white transition-colors">GitHub</a></li>
+              <li><a href="https://github.com/Atharva1479/GitTalk-AI/issues/new" target="_blank" rel="noopener noreferrer" className="text-slate-400 text-sm hover:text-white transition-colors">Report an Issue</a></li>
             </ul>
           </div>
 
