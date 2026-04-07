@@ -74,6 +74,10 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE conversations ADD COLUMN github_login TEXT DEFAULT NULL")
         except Exception:
             pass  # Column already exists
+        try:
+            await db.execute("ALTER TABLE users ADD COLUMN access_token_hash TEXT DEFAULT NULL")
+        except Exception:
+            pass  # Column already exists
 
         # ── Indexes ──
 
@@ -150,6 +154,21 @@ async def get_conversation_messages(conv_id: str) -> list[tuple[str, str]]:
             (conv_id,),
         )
         return await cursor.fetchall()
+
+
+async def get_all_repo_messages(github_login: str, owner: str, repo: str, limit: int = 50) -> list[tuple[str, str]]:
+    """Return all messages for a user+repo across all conversations, most recent first."""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            """SELECT m.role, m.content FROM messages m
+               JOIN conversations c ON c.id = m.conversation_id
+               WHERE c.github_login = ? AND c.owner = ? AND c.repo = ?
+               ORDER BY m.created_at ASC""",
+            (github_login, owner, repo),
+        )
+        rows = await cursor.fetchall()
+    # Return last `limit` messages
+    return rows[-limit:] if len(rows) > limit else rows
 
 
 # ── User functions ──

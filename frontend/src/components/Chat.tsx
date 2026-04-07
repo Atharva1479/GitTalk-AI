@@ -51,7 +51,7 @@ function formatStars(count: number): string {
 export function Chat() {
   const navigate = useNavigate()
   const { owner, repo } = useParams<{ owner: string; repo: string }>()
-  const { isConnected, sendMessage, lastMessage, disconnect, isProcessing, connect, startNewChat, suggestions, repoMetadata, isReconnecting, statusMessage, streamingContent, isStreaming, errorMessage } = useWebSocket()
+  const { isConnected, sendMessage, lastMessage, disconnect, isProcessing, connect, startNewChat, suggestions, repoMetadata, isReconnecting, statusMessage, streamingContent, isStreaming, errorMessage, rateLimitRemaining } = useWebSocket()
   const { user, token, isAuthenticated, login, manageInstallation } = useAuth()
   const [messages, setMessages] = useState<Message[]>(() => {
     // Restore messages from localStorage on initial render
@@ -81,31 +81,31 @@ export function Chat() {
 
   const storageKey = `chat_messages:${owner}/${repo}`
 
-  // Fetch messages from server if localStorage is empty but user is authenticated
+  // Fetch messages from server for authenticated users — always attempt on mount
   useEffect(() => {
-    if (messages.length > 0 || !owner || !repo || !token || isSharedView) return
-    const convId = localStorage.getItem(`conversation_id:${owner}/${repo}`)
-    if (!convId) return
+    if (!owner || !repo || !token || isSharedView) return
+    const convId = localStorage.getItem(`conversation_id:${owner}/${repo}`) || '_'
 
     const fetchMessages = async () => {
       try {
-        console.log(`[Chat] Fetching messages for conversation: ${convId}`);
-        const res = await fetch(`${config.HTTP_API_URL}/api/conversations/${convId}/messages`, {
+        const res = await fetch(`${config.HTTP_API_URL}/api/conversations/${convId}/messages?owner=${encodeURIComponent(owner!)}&repo=${encodeURIComponent(repo!)}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-        console.log(`[Chat] Messages fetch status: ${res.status}`);
         if (!res.ok) return
         const data = await res.json()
-        const msgs = data.messages as Message[]
-        if (msgs && msgs.length > 0) {
-          setMessages(msgs)
-          welcomeMessageShownRef.current = true
-          // Persist to localStorage so next load is instant
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(msgs.slice(-50)))
-          } catch {
-            // ignore
-          }
+        const serverMsgs = data.messages as Message[]
+        if (serverMsgs && serverMsgs.length > 0) {
+          setMessages(prev => {
+            // Use server messages if they have more content than local
+            if (serverMsgs.length > prev.length) {
+              welcomeMessageShownRef.current = true
+              try {
+                localStorage.setItem(storageKey, JSON.stringify(serverMsgs.slice(-50)))
+              } catch { /* ignore */ }
+              return serverMsgs
+            }
+            return prev
+          })
         }
       } catch {
         // Silent fail — localStorage is the fallback
@@ -274,6 +274,32 @@ export function Chat() {
     }
   }, [isLoading, isProcessing, isConnected]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl+Enter → send message
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSend();
+        return;
+      }
+      // Esc → close share menu
+      if (e.key === 'Escape') {
+        if (showShareMenu) {
+          setShowShareMenu(false);
+          return;
+        }
+      }
+      // "/" → focus input (only when not already typing)
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && document.activeElement !== inputRef.current) {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showShareMenu, inputValue, isConnected, isLoading, isProcessing, isStreaming]);
+
   // Handle error toasts
   useEffect(() => {
     if (errorMessage) {
@@ -371,6 +397,24 @@ export function Chat() {
     // Show clean query in chat UI (no mode tag)
     const displayMessage = activeMode ? `[${activeMode.charAt(0).toUpperCase() + activeMode.slice(1)} Mode] ${message}` : message;
     addMessage(displayMessage, 'user');
+
+    // Auto-generate conversation title from first user message
+    const isFirstUserMessage = messages.filter(m => m.role === 'user').length === 0;
+    if (isFirstUserMessage && owner && repo) {
+      const title = message.length > 60 ? message.slice(0, 57) + '...' : message;
+      try {
+        const saved = localStorage.getItem('recent_chats');
+        if (saved) {
+          const chats = JSON.parse(saved) as { owner: string; repo: string; title?: string }[];
+          const updated = chats.map(c =>
+            c.owner === owner && c.repo === repo ? { ...c, title } : c
+          );
+          localStorage.setItem('recent_chats', JSON.stringify(updated));
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     // Send with mode tag prefix to backend
     const wireMessage = activeMode ? `[MODE:${activeMode}] ${message}` : message;
@@ -667,7 +711,7 @@ export function Chat() {
                   </div>
                 </div>
               ) : (
-                <div key={index} className="flex gap-2.5 max-sm:gap-2">
+                <div key={index} className="flex gap-2.5 max-sm:gap-2 group/msg">
                   {/* AI Avatar */}
                   <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#7c3aed]/15 to-[#3b82f6]/15 flex items-center justify-center shrink-0 mt-1 max-sm:w-6 max-sm:h-6">
                     <Sparkles className="w-3.5 h-3.5 text-main max-sm:w-3 max-sm:h-3" />
@@ -694,6 +738,21 @@ export function Chat() {
                         }}
                       />
                     </div>
+                    {/* Copy answer button — bottom right inside bubble, hidden for mermaid diagrams */}
+                    {!message.content.includes('```mermaid') && (
+                      <div className="flex justify-end mt-1.5 -mb-1">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(stripSuggestions(message.content))
+                            toast.success('Copied!', { position: 'bottom-right', duration: 1500 })
+                          }}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground/35 hover:text-foreground/60 hover:bg-foreground/5 transition-all"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copy
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -897,6 +956,12 @@ export function Chat() {
               <SendHorizontal className="h-5 w-5" />
             </Button>
           </div>
+          {/* Rate limit indicator */}
+          {rateLimitRemaining !== null && rateLimitRemaining <= 10 && (
+            <p className={`text-[11px] text-right mt-1.5 pr-1 ${rateLimitRemaining <= 3 ? 'text-red-400' : 'text-foreground/35'}`}>
+              {rateLimitRemaining}/30 queries remaining
+            </p>
+          )}
         </div>
       </div>
     </div>

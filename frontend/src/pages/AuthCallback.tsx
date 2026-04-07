@@ -34,7 +34,8 @@ export function AuthCallback() {
     const exchangeCode = async () => {
       try {
         const response = await fetch(
-          `${config.HTTP_API_URL}/auth/github/callback?code=${encodeURIComponent(code)}`
+          `${config.HTTP_API_URL}/auth/github/callback?code=${encodeURIComponent(code)}`,
+          { credentials: 'include' }
         );
         if (!response.ok) {
           // If already authenticated, just redirect — code may be expired/reused

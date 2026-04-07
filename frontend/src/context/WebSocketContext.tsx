@@ -24,6 +24,7 @@ interface WebSocketContextType {
   streamingContent: string | null;
   isStreaming: boolean;
   errorMessage: string | null;
+  rateLimitRemaining: number | null;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -53,6 +54,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null);
   const connectingRef = useRef(false);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const intentionalCloseRef = useRef(false);
@@ -268,6 +270,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
             } catch {
               // ignore
             }
+          } else if (data.startsWith('rate_limit:')) {
+            const count = parseInt(data.slice('rate_limit:'.length), 10);
+            if (!isNaN(count)) setRateLimitRemaining(count);
           } else if (data.startsWith('suggestions:')) {
             try {
               const parsed = JSON.parse(data.slice('suggestions:'.length));
@@ -342,6 +347,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         streamingContent,
         isStreaming,
         errorMessage,
+        rateLimitRemaining,
       }}
     >
       {children}

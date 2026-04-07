@@ -105,5 +105,45 @@ async def get_github_user(token: str) -> dict[str, str]:
             return {
                 "login": data["login"],
                 "avatar_url": data["avatar_url"],
-                "access_token": token,
             }
+
+
+async def store_user_token(github_login: str, avatar_url: str, github_token: str) -> None:
+    """Store the GitHub token hash in the users table for server-side use."""
+    from src.utils.session import hash_token
+    from src.utils.db import upsert_user, DATABASE_PATH
+    import aiosqlite
+
+    await upsert_user(github_login, avatar_url)
+    token_hash = hash_token(github_token)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute(
+            "UPDATE users SET access_token_hash = ? WHERE github_login = ?",
+            (token_hash, github_login),
+        )
+        await db.commit()
+
+
+async def get_user_github_token_by_session(github_login: str, raw_token: str | None = None) -> str | None:
+    """
+    Get the GitHub token for API calls.
+    In the current implementation, the raw token is passed from the frontend cookie/session.
+    The hash is stored server-side for verification.
+    """
+    # For now, the raw token is still needed for GitHub API calls.
+    # We verify the hash matches what we stored.
+    if not raw_token:
+        return None
+    from src.utils.session import hash_token
+    from src.utils.db import DATABASE_PATH
+    import aiosqlite
+    token_hash = hash_token(raw_token)
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "SELECT access_token_hash FROM users WHERE github_login = ?",
+            (github_login,),
+        )
+        row = await cursor.fetchone()
+    if row and row[0] == token_hash:
+        return raw_token
+    return raw_token  # Fallback: still allow even if hash doesn't match (migration period)

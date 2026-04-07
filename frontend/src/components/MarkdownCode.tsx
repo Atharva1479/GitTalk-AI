@@ -258,6 +258,22 @@ export const MarkdownCode = ({ children = [], className, ...props }: any) => {
     }
   }, []);
 
+  const downloadSvg = useCallback(() => {
+    if (!container) return;
+    const svgEl = container.querySelector('svg');
+    if (!svgEl) return;
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svgEl);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'diagram.svg';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [container]);
+
+
   if (isMermaid) {
     return (
       <Fragment>
@@ -274,6 +290,23 @@ export const MarkdownCode = ({ children = [], className, ...props }: any) => {
             <pre style={{ fontSize: 13, padding: '1rem', overflowX: 'auto', background: '#f9fafb', margin: 0 }}>
               <code>{errorCode}</code>
             </pre>
+          </div>
+        )}
+        {/* Download buttons for rendered diagrams */}
+        {renderState === 'success' && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 4 }}>
+            <button
+              onClick={downloadSvg}
+              style={{
+                padding: '3px 10px', fontSize: 11, borderRadius: 6,
+                border: '1px solid #e5e7eb', background: '#faf9f7',
+                color: '#666', cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#7c3aed'; e.currentTarget.style.color = '#7c3aed'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#666'; }}
+            >
+              Download SVG
+            </button>
           </div>
         )}
         <div

@@ -5,7 +5,7 @@ import { Navbar } from "../components/Navbar"
 import { Footer } from "../components/Footer"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
-import { Search, Lock, Globe, Star, Clock, Plus, ExternalLink, X, Settings, MessageSquare, ArrowRight, Trash2 } from "lucide-react"
+import { Search, Lock, Globe, Star, Clock, Plus, ExternalLink, X, Settings, MessageSquare, ArrowRight, Trash2, Pencil, Check } from "lucide-react"
 import config from "../config"
 
 interface Repo {
@@ -25,6 +25,7 @@ interface RecentChat {
   private: boolean
   timestamp: number
   messageCount?: number
+  title?: string
 }
 
 function timeAgo(dateStr: string | number): string {
@@ -73,6 +74,20 @@ export function Dashboard() {
   const [recentChats, setRecentChats] = useState<RecentChat[]>([])
   const [installationId, setInstallationId] = useState<number | null>(null)
   const [showManageModal, setShowManageModal] = useState(false)
+  const [editingChat, setEditingChat] = useState<string | null>(null) // "owner/repo" being edited
+  const [editTitle, setEditTitle] = useState("")
+
+  const renameChat = (chatOwner: string, chatRepo: string, newTitle: string) => {
+    const title = newTitle.trim()
+    if (!title) return
+    const updated = recentChats.map(c =>
+      c.owner === chatOwner && c.repo === chatRepo ? { ...c, title } : c
+    )
+    setRecentChats(updated)
+    localStorage.setItem('recent_chats', JSON.stringify(updated))
+    setEditingChat(null)
+  }
+
 
   const fetchRepos = useCallback(async () => {
     if (!token) return
@@ -259,20 +274,33 @@ export function Dashboard() {
                       e.currentTarget.style.transform = 'translateY(0)'
                     }}
                   >
-                    {/* Delete button */}
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeRecentChat(chat.owner, chat.repo)
-                      }}
-                      className="absolute top-3 right-3 p-1.5 rounded-lg text-foreground/25 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                      title="Remove chat"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
+                    {/* Action buttons */}
+                    <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-colors">
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingChat(`${chat.owner}/${chat.repo}`)
+                          setEditTitle(chat.title || '')
+                        }}
+                        className="p-1.5 rounded-lg text-foreground/25 hover:text-main hover:bg-[#f5f3ff] transition-colors cursor-pointer"
+                        title="Rename"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </div>
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeRecentChat(chat.owner, chat.repo)
+                        }}
+                        className="p-1.5 rounded-lg text-foreground/25 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                        title="Remove chat"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </div>
                     </div>
 
                     {/* Icon + repo name */}
-                    <div className="flex items-center gap-2.5 mb-2.5">
+                    <div className="flex items-center gap-2.5 mb-2">
                       <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#7c3aed]/15 to-[#3b82f6]/15 flex items-center justify-center shrink-0">
                         <MessageSquare className="w-4 h-4 text-main" />
                       </div>
@@ -290,6 +318,32 @@ export function Dashboard() {
                         <p className="text-xs text-foreground/45 truncate">{chat.owner}</p>
                       </div>
                     </div>
+                    {/* Conversation title — inline editable */}
+                    {editingChat === `${chat.owner}/${chat.repo}` ? (
+                      <div className="flex items-center gap-1.5 mb-2 pl-[2.875rem]" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          autoFocus
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') renameChat(chat.owner, chat.repo, editTitle)
+                            if (e.key === 'Escape') setEditingChat(null)
+                          }}
+                          className="flex-1 text-xs bg-white border border-main/30 rounded-lg px-2 py-1 outline-none focus:ring-1 focus:ring-main/30"
+                          placeholder="Enter conversation title..."
+                        />
+                        <div
+                          onClick={() => renameChat(chat.owner, chat.repo, editTitle)}
+                          className="p-1 rounded-md text-main hover:bg-main/10 cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+                    ) : chat.title ? (
+                      <p className="text-xs text-foreground/55 truncate mb-2 pl-[2.875rem]">
+                        {chat.title}
+                      </p>
+                    ) : null}
 
                     {/* Meta row */}
                     <div className="flex items-center justify-between">

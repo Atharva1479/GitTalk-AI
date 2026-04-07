@@ -26,6 +26,13 @@ class RateLimiter:
         timestamps.append(now)
         return True
 
+    def remaining(self, key: str) -> int:
+        """Return how many requests are left in the current window."""
+        now = time.monotonic()
+        cutoff = now - self.window_seconds
+        active = [t for t in self._requests.get(key, []) if t > cutoff]
+        return max(0, self.max_requests - len(active))
+
     def cleanup(self) -> None:
         """Remove stale entries to prevent memory leaks."""
         now = time.monotonic()

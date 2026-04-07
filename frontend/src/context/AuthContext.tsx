@@ -30,19 +30,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  // Restore from localStorage on mount
+  // Restore auth state: try session cookie first, then localStorage fallback
   useEffect(() => {
-    const savedToken = localStorage.getItem('github_token');
-    const savedUser = localStorage.getItem('github_user');
-    if (savedToken && savedUser) {
+    const restoreSession = async () => {
+      // Try server-side session cookie (httpOnly, secure)
       try {
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
+        const res = await fetch(`${config.HTTP_API_URL}/auth/session`, {
+          credentials: 'include', // Send cookies
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUser({ login: data.login, avatar_url: data.avatar_url });
+          // Restore token from localStorage if available (needed for WebSocket/API calls)
+          const savedToken = localStorage.getItem('github_token');
+          if (savedToken) setToken(savedToken);
+          return;
+        }
       } catch {
-        localStorage.removeItem('github_token');
-        localStorage.removeItem('github_user');
+        // Server not reachable, fall through to localStorage
       }
-    }
+
+      // Fallback: localStorage (backward compat)
+      const savedToken = localStorage.getItem('github_token');
+      const savedUser = localStorage.getItem('github_user');
+      if (savedToken && savedUser) {
+        try {
+          setToken(savedToken);
+          setUser(JSON.parse(savedUser));
+        } catch {
+          localStorage.removeItem('github_token');
+          localStorage.removeItem('github_user');
+        }
+      }
+    };
+    restoreSession();
   }, []);
 
   const login = () => {
@@ -56,11 +77,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = url;
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
     setToken(null);
     localStorage.removeItem('github_token');
     localStorage.removeItem('github_user');
+    // Clear server-side session cookie
+    try {
+      await fetch(`${config.HTTP_API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Best effort
+    }
   };
 
   const manageInstallation = () => {
@@ -75,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authUser = { login: data.login, avatar_url: data.avatar_url };
     setUser(authUser);
     setToken(data.access_token);
+    // Still store in localStorage for WebSocket token param (needed until full migration to cookie-only)
     localStorage.setItem('github_token', data.access_token);
     localStorage.setItem('github_user', JSON.stringify(authUser));
     localStorage.setItem('github_app_installed', 'true');

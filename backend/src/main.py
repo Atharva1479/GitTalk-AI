@@ -30,9 +30,18 @@ from src.utils.auth import (
     exchange_code_for_token,
     get_github_user,
     get_user_repos,
+    store_user_token,
     GITHUB_CLIENT_ID,
     GITHUB_REDIRECT_URI,
     GITHUB_APP_SLUG,
+)
+from src.utils.session import (
+    generate_csrf_state,
+    validate_csrf_state,
+    create_session_token,
+    get_session_from_cookie,
+    build_session_cookie,
+    build_clear_cookie,
 )
 from src.utils.rate_limit import (
     ws_connect_limiter,
@@ -147,51 +156,100 @@ def get_client_ip(request: Request) -> str:
 
 @app.get("/auth/github")
 async def github_auth(request: Request, install: bool = False):
-    """Redirect to GitHub for auth. First-time users go to install page, returning users go to OAuth."""
+    """Redirect to GitHub for auth with CSRF state parameter."""
     ip = get_client_ip(request)
     if not auth_limiter.is_allowed(ip):
         return JSONResponse(status_code=429, content={"error": "Too many requests. Please try again later."})
+
+    state = generate_csrf_state()
+
     if install:
-        # First-time: install the app + select repos + authorize in one flow
-        url = f"https://github.com/apps/{GITHUB_APP_SLUG}/installations/new"
+        url = f"https://github.com/apps/{GITHUB_APP_SLUG}/installations/new?state={state}"
     else:
-        # Returning users: just re-authorize (skips the installation page)
         url = (
             f"https://github.com/login/oauth/authorize"
             f"?client_id={GITHUB_CLIENT_ID}"
             f"&redirect_uri={GITHUB_REDIRECT_URI}"
+            f"&state={state}"
         )
     return RedirectResponse(url=url)
 
 
 @app.get("/auth/github/callback")
-async def github_auth_callback(request: Request, code: str | None = Query(None)):
-    """Exchange the OAuth code for a token and return user info.
-    After GitHub App installation, GitHub redirects here without a code —
-    in that case, redirect the user to the OAuth authorize flow to get one."""
+async def github_auth_callback(
+    request: Request,
+    code: str | None = Query(None),
+    state: str | None = Query(None),
+):
+    """Exchange the OAuth code for a token, set httpOnly session cookie."""
     ip = get_client_ip(request)
     if not auth_limiter.is_allowed(ip):
         return JSONResponse(status_code=429, content={"error": "Too many requests. Please try again later."})
 
     # After GitHub App installation, no code is provided — kick off OAuth
     if not code:
+        new_state = generate_csrf_state()
         oauth_url = (
             f"https://github.com/login/oauth/authorize"
             f"?client_id={GITHUB_CLIENT_ID}"
             f"&redirect_uri={GITHUB_REDIRECT_URI}"
+            f"&state={new_state}"
         )
         return RedirectResponse(url=oauth_url)
+
+    # Validate CSRF state (skip validation if state is None — GitHub App install flow doesn't always pass it back)
+    if state and not validate_csrf_state(state):
+        logging.warning(f"Invalid CSRF state from {ip}")
+        return JSONResponse(status_code=400, content={"error": "Invalid state parameter. Please try again."})
 
     try:
         access_token = await exchange_code_for_token(code)
         user_info = await get_github_user(access_token)
-        return JSONResponse(content=user_info)
+        login = user_info["login"]
+        avatar_url = user_info["avatar_url"]
+
+        # Store token hash server-side
+        await store_user_token(login, avatar_url, access_token)
+
+        # Create signed session JWT
+        session_token = create_session_token(login, avatar_url)
+
+        # Return user info + set httpOnly session cookie
+        response = JSONResponse(content={
+            "login": login,
+            "avatar_url": avatar_url,
+            "access_token": access_token,  # Still returned for backward compat (WebSocket, repo fetches)
+            "session_token": session_token,  # Frontend can optionally use this
+        })
+        response.headers["Set-Cookie"] = build_session_cookie(session_token, IS_PROD)
+        return response
     except ValueError as e:
         logging.error(f"OAuth callback error: {e}")
         return JSONResponse(
             status_code=400,
             content={"error": str(e)},
         )
+
+
+@app.post("/auth/logout")
+async def auth_logout():
+    """Clear the session cookie."""
+    response = JSONResponse(content={"status": "ok"})
+    response.headers["Set-Cookie"] = build_clear_cookie(IS_PROD)
+    return response
+
+
+@app.get("/auth/session")
+async def auth_session(request: Request):
+    """Verify the session cookie and return user info. Used for session restore."""
+    cookie = request.headers.get("cookie")
+    session = get_session_from_cookie(cookie)
+    if not session:
+        return JSONResponse(status_code=401, content={"error": "No valid session"})
+    return JSONResponse(content={
+        "login": session["sub"],
+        "avatar_url": session.get("avatar_url", ""),
+    })
 
 
 @app.get("/auth/repos")
@@ -215,11 +273,18 @@ async def get_repos(request: Request, token: str = Query(...)):
 
 
 async def _verify_user(request: Request) -> str:
-    """Verify GitHub token from Authorization header and return login."""
+    """Verify user identity from session cookie or Authorization header."""
+    # Try session cookie first (more secure, httpOnly)
+    cookie = request.headers.get("cookie")
+    session = get_session_from_cookie(cookie)
+    if session:
+        return session["sub"]
+
+    # Fallback to Authorization header (backward compat)
     auth = request.headers.get("Authorization", "")
     token = auth.replace("Bearer ", "") if auth.startswith("Bearer ") else ""
     if not token:
-        raise ValueError("Missing Authorization header")
+        raise ValueError("Missing authentication")
     user = await get_github_user(token)
     return user["login"]
 
@@ -266,31 +331,52 @@ async def get_conversations(request: Request) -> JSONResponse:
 
 
 @app.get("/api/conversations/{conv_id}/messages")
-async def get_messages(request: Request, conv_id: str) -> JSONResponse:
-    """Get all messages for a conversation. Verifies the user owns it."""
+async def get_messages(
+    request: Request, conv_id: str,
+    owner: str | None = Query(default=None),
+    repo: str | None = Query(default=None),
+) -> JSONResponse:
+    """Get messages for a conversation. Falls back to all repo messages if conv is empty."""
     try:
         login = await _verify_user(request)
     except Exception as e:
         logging.warning(f"Auth failed for messages endpoint: {e}")
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    from src.utils.db import get_conversation_messages, DATABASE_PATH
+    from src.utils.db import get_conversation_messages, get_all_repo_messages, DATABASE_PATH
     import aiosqlite
+
+    # Try specific conversation first
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
-            "SELECT github_login FROM conversations WHERE id = ?", (conv_id,)
+            "SELECT github_login, owner, repo FROM conversations WHERE id = ?", (conv_id,)
         )
         row = await cursor.fetchone()
-    if not row:
-        return JSONResponse(status_code=404, content={"error": "Conversation not found"})
-    # Case-insensitive ownership check (GitHub usernames are case-insensitive)
-    db_login = row[0] or ""
-    if db_login.lower() != login.lower():
-        logging.warning(f"Ownership mismatch: db={db_login!r} vs token={login!r}")
-        return JSONResponse(status_code=404, content={"error": "Conversation not found"})
-    messages = await get_conversation_messages(conv_id)
-    return JSONResponse(content={
-        "messages": [{"role": r, "content": c} for r, c in messages]
-    })
+
+    if row:
+        db_login = row[0] or ""
+        if db_login.lower() == login.lower():
+            messages = await get_conversation_messages(conv_id)
+            if messages:
+                return JSONResponse(content={
+                    "messages": [{"role": r, "content": c} for r, c in messages]
+                })
+            # Conversation exists but empty — fallback to all repo messages
+            conv_owner, conv_repo = row[1], row[2]
+            all_msgs = await get_all_repo_messages(login, conv_owner, conv_repo)
+            if all_msgs:
+                return JSONResponse(content={
+                    "messages": [{"role": r, "content": c} for r, c in all_msgs]
+                })
+
+    # Conversation not found or not owned — try owner/repo params as fallback
+    if owner and repo:
+        all_msgs = await get_all_repo_messages(login, owner, repo)
+        if all_msgs:
+            return JSONResponse(content={
+                "messages": [{"role": r, "content": c} for r, c in all_msgs]
+            })
+
+    return JSONResponse(content={"messages": []})
 
 
 @app.delete("/api/user/memory")
@@ -714,6 +800,10 @@ async def websocket_endpoint(
                     continue
 
                 await manager.handle_message(client_id, text)
+
+                # Send remaining rate limit count to frontend
+                remaining = chat_query_limiter.remaining(ip)
+                await websocket.send_text(f"rate_limit:{remaining}")
             except WebSocketDisconnect:
                 break
             except Exception as e:
