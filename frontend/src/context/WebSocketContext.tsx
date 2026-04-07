@@ -10,7 +10,8 @@ interface RepoMetadata {
 }
 
 interface WebSocketContextType {
-  connect: (owner: string, repo: string, githubToken?: string | null) => Promise<void>;
+  connect: (owner: string, repo: string, githubToken?: string | null, githubLogin?: string | null) => Promise<void>;
+  startNewChat: (owner: string, repo: string) => void;
   disconnect: () => void;
   sendMessage: (message: string) => void;
   isConnected: boolean;
@@ -57,7 +58,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const intentionalCloseRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connParamsRef = useRef<{ owner: string; repo: string; githubToken?: string | null } | null>(null);
+  const connParamsRef = useRef<{ owner: string; repo: string; githubToken?: string | null; githubLogin?: string | null } | null>(null);
 
   const clearPingInterval = () => {
     if (pingIntervalRef.current) {
@@ -90,7 +91,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const connect = async (owner: string, repo: string, githubToken?: string | null) => {
+  const startNewChat = (owner: string, repo: string) => {
+    localStorage.removeItem(`conversation_id:${owner}/${repo}`);
+  };
+
+  const connect = async (owner: string, repo: string, githubToken?: string | null, githubLogin?: string | null) => {
     // Prevent multiple simultaneous connection attempts
     if (connectingRef.current) {
       return;
@@ -109,7 +114,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       try {
         connectingRef.current = true;
         intentionalCloseRef.current = false;
-        connParamsRef.current = { owner, repo, githubToken };
+        connParamsRef.current = { owner, repo, githubToken, githubLogin };
 
         // Clean up any existing connection first
         if (socket) {
@@ -120,11 +125,23 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         }
         clearPingInterval();
 
-        const clientId = nanoid(10);
-        let wsUrl = `${config.API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${clientId}`;
-        if (githubToken) {
-          wsUrl += `?token=${encodeURIComponent(githubToken)}`;
+        // Reuse conversation ID for reconnects, or generate a new one
+        const convKey = `conversation_id:${owner}/${repo}`;
+        let clientId = localStorage.getItem(convKey);
+        if (!clientId) {
+          clientId = nanoid(10);
+          localStorage.setItem(convKey, clientId);
+          console.log(`[WS] New conversation ID: ${clientId} for ${owner}/${repo}`);
+        } else {
+          console.log(`[WS] Reusing conversation ID: ${clientId} for ${owner}/${repo}`);
         }
+
+        let wsUrl = `${config.API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${clientId}`;
+        const params = new URLSearchParams();
+        if (githubToken) params.set('token', githubToken);
+        if (githubLogin) params.set('github_login', githubLogin);
+        const qs = params.toString();
+        if (qs) wsUrl += `?${qs}`;
         const ws = new WebSocket(wsUrl);
 
         const timeout = setTimeout(() => {
@@ -278,7 +295,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
             reconnectTimeoutRef.current = setTimeout(() => {
               reconnectAttemptsRef.current += 1;
               const params = connParamsRef.current!;
-              connect(params.owner, params.repo, params.githubToken).then(() => {
+              connect(params.owner, params.repo, params.githubToken, params.githubLogin).then(() => {
                 reconnectAttemptsRef.current = 0;
                 setIsReconnecting(false);
               }).catch(() => {
@@ -314,6 +331,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         connect,
         disconnect,
         sendMessage,
+        startNewChat,
         isConnected,
         isProcessing,
         lastMessage,

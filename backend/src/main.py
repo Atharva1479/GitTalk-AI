@@ -3,7 +3,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 
-from src.utils.db import init_db, save_conversation, save_message
+from src.utils.db import init_db, save_conversation, save_message, upsert_user
+from src.utils.memory import (
+    load_short_term_memory,
+    load_long_term_context,
+    summarize_conversation,
+    extract_user_memories,
+    cleanup_expired_memories,
+)
 from src.utils.cache import load_repo_cache, save_repo_cache, is_repo_indexed, save_chunk_cache, load_chunk_cache
 from src.utils.ingest import ingest_repo, fetch_repo_metadata
 from src.utils.llm import generate_response, generate_response_stream, generate_initial_suggestions
@@ -66,6 +73,7 @@ async def lifespan(app: FastAPI):
             chat_query_limiter.cleanup()
             auth_limiter.cleanup()
             repo_fetch_limiter.cleanup()
+            await cleanup_expired_memories()
 
     await init_db()
     try:
@@ -203,6 +211,100 @@ async def get_repos(request: Request, token: str = Query(...)):
         )
 
 
+# ── User memory & preferences endpoints ─────────────────────────────────────
+
+
+async def _verify_user(request: Request) -> str:
+    """Verify GitHub token from Authorization header and return login."""
+    auth = request.headers.get("Authorization", "")
+    token = auth.replace("Bearer ", "") if auth.startswith("Bearer ") else ""
+    if not token:
+        raise ValueError("Missing Authorization header")
+    user = await get_github_user(token)
+    return user["login"]
+
+
+@app.get("/api/user/preferences")
+async def get_preferences(request: Request) -> JSONResponse:
+    """Get user preferences and settings."""
+    try:
+        login = await _verify_user(request)
+    except Exception:
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    from src.utils.db import get_user_settings
+    prefs = await get_user_settings(login)
+    return JSONResponse(content=prefs)
+
+
+@app.put("/api/user/preferences")
+async def update_preferences(request: Request) -> JSONResponse:
+    """Update user preferences."""
+    try:
+        login = await _verify_user(request)
+    except Exception:
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    body = await request.json()
+    from src.utils.db import update_user_settings
+    await update_user_settings(
+        login,
+        preferred_mode=body.get("preferred_mode"),
+        settings_json=json.dumps(body.get("settings", {})) if "settings" in body else None,
+    )
+    return JSONResponse(content={"status": "ok"})
+
+
+@app.get("/api/user/conversations")
+async def get_conversations(request: Request) -> JSONResponse:
+    """Get a user's past conversations with summaries."""
+    try:
+        login = await _verify_user(request)
+    except Exception:
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    from src.utils.db import get_user_conversations
+    convs = await get_user_conversations(login)
+    return JSONResponse(content={"conversations": convs})
+
+
+@app.get("/api/conversations/{conv_id}/messages")
+async def get_messages(request: Request, conv_id: str) -> JSONResponse:
+    """Get all messages for a conversation. Verifies the user owns it."""
+    try:
+        login = await _verify_user(request)
+    except Exception as e:
+        logging.warning(f"Auth failed for messages endpoint: {e}")
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    from src.utils.db import get_conversation_messages, DATABASE_PATH
+    import aiosqlite
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "SELECT github_login FROM conversations WHERE id = ?", (conv_id,)
+        )
+        row = await cursor.fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Conversation not found"})
+    # Case-insensitive ownership check (GitHub usernames are case-insensitive)
+    db_login = row[0] or ""
+    if db_login.lower() != login.lower():
+        logging.warning(f"Ownership mismatch: db={db_login!r} vs token={login!r}")
+        return JSONResponse(status_code=404, content={"error": "Conversation not found"})
+    messages = await get_conversation_messages(conv_id)
+    return JSONResponse(content={
+        "messages": [{"role": r, "content": c} for r, c in messages]
+    })
+
+
+@app.delete("/api/user/memory")
+async def clear_memory(request: Request) -> JSONResponse:
+    """Clear all long-term memory for a user."""
+    try:
+        login = await _verify_user(request)
+    except Exception:
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+    from src.utils.db import clear_user_memory
+    await clear_user_memory(login)
+    return JSONResponse(content={"status": "ok"})
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -231,6 +333,7 @@ class ConnectionManager:
     async def connect(
         self, websocket: WebSocket, client_id: str, owner: str, repo: str,
         github_token: str | None = None,
+        github_login: str | None = None,
     ) -> None:
         await websocket.accept()
 
@@ -343,9 +446,27 @@ class ConnectionManager:
                 await websocket.close()
                 return
 
+        # Upsert user if authenticated
+        if github_login:
+            try:
+                await upsert_user(github_login, "")
+            except Exception:
+                pass
+
+        # Restore short-term memory from SQLite (survives reconnects)
+        restored_history = await load_short_term_memory(client_id)
+
+        # Load long-term context for authenticated users
+        long_term_context = ""
+        if github_login:
+            try:
+                long_term_context = await load_long_term_context(github_login, owner, repo)
+            except Exception:
+                pass
+
         self.active_connections[client_id] = {
             "websocket": websocket,
-            "history": [],
+            "history": restored_history if restored_history else [],
             "owner": owner,
             "repo": repo,
             "summary": summary,
@@ -353,9 +474,11 @@ class ConnectionManager:
             "namespace": namespace,
             "request_id": request_id,
             "github_token": github_token,
+            "github_login": github_login,
+            "long_term_context": long_term_context,
         }
 
-        await save_conversation(client_id, owner, repo)
+        await save_conversation(client_id, owner, repo, github_login=github_login)
 
         # Send metadata before confirmation
         if metadata:
@@ -375,8 +498,20 @@ class ConnectionManager:
 
     async def disconnect(self, client_id: str) -> None:
         if client_id in self.active_connections:
+            conn = self.active_connections[client_id]
+            github_login = conn.get("github_login")
+            history = conn.get("history", [])
+            owner = conn.get("owner", "")
+            repo = conn.get("repo", "")
+
+            # Fire background summarization for authenticated users with real conversations
+            if github_login and len(history) >= 3:
+                import asyncio as _asyncio
+                _asyncio.create_task(summarize_conversation(client_id, github_login, owner, repo))
+                _asyncio.create_task(extract_user_memories(client_id, github_login, owner, repo))
+
             try:
-                await self.active_connections[client_id]["websocket"].close()
+                await conn["websocket"].close()
             except Exception:
                 pass
             del self.active_connections[client_id]
@@ -449,7 +584,12 @@ class ConnectionManager:
 
         await ws.send_text("status:thinking")
 
-        prompt = await generate_prompt(query, history, tree, reranked, summary=summary, mode=mode)
+        # Cap prompt history to last 10 turns to prevent context window overflow
+        prompt_history = history[-10:]
+        prompt = await generate_prompt(
+            query, prompt_history, tree, reranked, summary=summary, mode=mode,
+            long_term_context=conn.get("long_term_context"),
+        )
         try:
             start = time.monotonic()
             full_response = ""
@@ -537,6 +677,7 @@ manager = ConnectionManager()
 async def websocket_endpoint(
     websocket: WebSocket, owner: str, repo: str, client_id: str,
     token: str | None = Query(default=None),
+    github_login: str | None = Query(default=None),
 ) -> None:
     # Rate limit WebSocket connections per IP
     ip = websocket.client.host if websocket.client else "unknown"
@@ -548,7 +689,7 @@ async def websocket_endpoint(
         return
 
     try:
-        await manager.connect(websocket, client_id, owner, repo, github_token=token)
+        await manager.connect(websocket, client_id, owner, repo, github_token=token, github_login=github_login)
 
         conn = manager.active_connections.get(client_id)
         if not conn:

@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom"
 import { MessageSquarePlus } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../context/AuthContext"
+import { useWebSocket } from "../context/WebSocketContext"
 
 interface ChatNavbarProps {
   onNewChat: () => void
@@ -10,6 +11,7 @@ interface ChatNavbarProps {
 export function ChatNavbar({ onNewChat }: ChatNavbarProps) {
   const navigate = useNavigate()
   const { user, isAuthenticated, login, logout } = useAuth()
+  const { disconnect } = useWebSocket()
 
   const handleLogoClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -37,7 +39,7 @@ export function ChatNavbar({ onNewChat }: ChatNavbarProps) {
             {isAuthenticated && user ? (
               <div className="flex items-center gap-3 max-sm:gap-2">
                 <button
-                  onClick={() => { onNewChat(); navigate('/dashboard'); }}
+                  onClick={() => { disconnect(); navigate('/dashboard'); }}
                   className="flex items-center gap-2 hover:opacity-80 transition-opacity max-sm:gap-1.5"
                 >
                   <img
@@ -51,7 +53,7 @@ export function ChatNavbar({ onNewChat }: ChatNavbarProps) {
                   variant="outline"
                   size="sm"
                   className="rounded-full px-3 text-xs hidden sm:inline-flex"
-                  onClick={() => { onNewChat(); logout(); navigate('/'); }}
+                  onClick={() => { disconnect(); logout(); navigate('/'); }}
                 >
                   Sign Out
                 </Button>

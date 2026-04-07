@@ -13,6 +13,7 @@ import { Toaster } from "./ui/sonner"
 import { toast } from "sonner"
 import { MarkdownCode } from "./MarkdownCode"
 import LZString from "lz-string"
+import config from "../config"
 
 interface Message {
   content: string
@@ -50,8 +51,8 @@ function formatStars(count: number): string {
 export function Chat() {
   const navigate = useNavigate()
   const { owner, repo } = useParams<{ owner: string; repo: string }>()
-  const { isConnected, sendMessage, lastMessage, disconnect, isProcessing, connect, suggestions, repoMetadata, isReconnecting, statusMessage, streamingContent, isStreaming, errorMessage } = useWebSocket()
-  const { token, isAuthenticated, login, manageInstallation } = useAuth()
+  const { isConnected, sendMessage, lastMessage, disconnect, isProcessing, connect, startNewChat, suggestions, repoMetadata, isReconnecting, statusMessage, streamingContent, isStreaming, errorMessage } = useWebSocket()
+  const { user, token, isAuthenticated, login, manageInstallation } = useAuth()
   const [messages, setMessages] = useState<Message[]>(() => {
     // Restore messages from localStorage on initial render
     if (owner && repo && !window.location.hash.startsWith('#share=')) {
@@ -79,6 +80,39 @@ export function Chat() {
   const shareMenuRef = useRef<HTMLDivElement>(null)
 
   const storageKey = `chat_messages:${owner}/${repo}`
+
+  // Fetch messages from server if localStorage is empty but user is authenticated
+  useEffect(() => {
+    if (messages.length > 0 || !owner || !repo || !token || isSharedView) return
+    const convId = localStorage.getItem(`conversation_id:${owner}/${repo}`)
+    if (!convId) return
+
+    const fetchMessages = async () => {
+      try {
+        console.log(`[Chat] Fetching messages for conversation: ${convId}`);
+        const res = await fetch(`${config.HTTP_API_URL}/api/conversations/${convId}/messages`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        console.log(`[Chat] Messages fetch status: ${res.status}`);
+        if (!res.ok) return
+        const data = await res.json()
+        const msgs = data.messages as Message[]
+        if (msgs && msgs.length > 0) {
+          setMessages(msgs)
+          welcomeMessageShownRef.current = true
+          // Persist to localStorage so next load is instant
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(msgs.slice(-50)))
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        // Silent fail — localStorage is the fallback
+      }
+    }
+    fetchMessages()
+  }, [owner, repo, token, isSharedView])
 
   const persistMessages = useCallback((msgs: Message[]) => {
     if (!owner || !repo) return
@@ -218,7 +252,7 @@ export function Chat() {
 
       connectionAttemptedRef.current = true
       try {
-        await connect(owner, repo, token)
+        await connect(owner, repo, token, user?.login)
         setConnectionError("")
       } catch (err) {
         console.error('Failed to connect:', err)
@@ -526,6 +560,7 @@ export function Chat() {
         onNewChat={() => {
           setMessages([])
           localStorage.removeItem(storageKey)
+          if (owner && repo) startNewChat(owner, repo)
           disconnect()
           navigate(isAuthenticated ? '/dashboard' : '/')
         }}

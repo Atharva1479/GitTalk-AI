@@ -37,6 +37,7 @@ async def generate_prompt(
     query: str, history: list[tuple[str, str]], tree: str, retrieved_chunks: list[Document],
     summary: str = "",
     mode: str | None = None,
+    long_term_context: str | None = None,
 ) -> str:
     """
     Generate a prompt for the LLM to answer a query using retrieved code snippets.
@@ -87,7 +88,7 @@ CONVERSATION HISTORY
 ═══════════════════════════════════════════
 {conversation_history}
 
-{"═══════════════════════════════════════════" + chr(10) + "ACTIVE MODE" + chr(10) + "═══════════════════════════════════════════" + chr(10) + MODE_INSTRUCTIONS[mode] + chr(10) + chr(10) if mode and mode in MODE_INSTRUCTIONS else ""}═══════════════════════════════════════════
+{"═══════════════════════════════════════════" + chr(10) + "ACTIVE MODE" + chr(10) + "═══════════════════════════════════════════" + chr(10) + MODE_INSTRUCTIONS[mode] + chr(10) + chr(10) if mode and mode in MODE_INSTRUCTIONS else ""}{"═══════════════════════════════════════════" + chr(10) + "USER CONTEXT (from previous sessions)" + chr(10) + "═══════════════════════════════════════════" + chr(10) + long_term_context + chr(10) + chr(10) if long_term_context else ""}═══════════════════════════════════════════
 CURRENT QUESTION
 ═══════════════════════════════════════════
 {query}
