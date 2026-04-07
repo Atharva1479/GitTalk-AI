@@ -29,24 +29,24 @@ export function HeroSection({
       {/* Dot pattern overlay */}
       <div className="absolute inset-0 bg-dots opacity-50" />
 
-      {/* Decorative orbs */}
-      <div className="absolute top-20 left-10 w-96 h-96 bg-purple-400/30 rounded-full blur-3xl animate-float" />
-      <div className="absolute bottom-10 right-10 w-[28rem] h-[28rem] bg-blue-400/30 rounded-full blur-3xl animate-float-delayed" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-indigo-300/20 rounded-full blur-3xl animate-float-slow" />
+      {/* Decorative orbs — hidden on small screens to prevent overflow */}
+      <div className="hidden sm:block absolute top-20 left-10 w-96 h-96 bg-purple-400/30 rounded-full blur-3xl animate-float" />
+      <div className="hidden sm:block absolute bottom-10 right-10 w-[28rem] h-[28rem] bg-blue-400/30 rounded-full blur-3xl animate-float-delayed" />
+      <div className="hidden sm:block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-indigo-300/20 rounded-full blur-3xl animate-float-slow" />
 
-      <div className="relative max-w-5xl mx-auto px-4 pt-24 sm:pt-32 pb-20 sm:pb-28">
+      <div className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-16 sm:pt-32 pb-16 sm:pb-28">
         <div className="flex flex-col items-center text-center">
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold tracking-tight mb-6">
+          <h1 className="text-3xl sm:text-5xl md:text-7xl font-extrabold tracking-tight mb-4 sm:mb-6">
             Chat With Any{' '}
             <span className="gradient-text">GitHub Repo</span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-foreground/70 max-w-2xl mb-10">
+          <p className="text-base sm:text-xl text-foreground/70 max-w-2xl mb-6 sm:mb-10 px-2 sm:px-0">
             Stop reading endless documentation. Paste a GitHub URL and start asking questions instantly. Get answers in seconds, not hours.
           </p>
 
           {/* Repo URL input card */}
-          <div className="w-full max-w-[700px] rounded-2xl border border-border bg-[#faf9f7]/90 backdrop-blur-sm p-5 sm:p-6 mb-6" style={{ boxShadow: 'var(--shadow-xl), var(--shadow-glow)' }}>
+          <div className="w-full max-w-[700px] rounded-2xl border border-border bg-[#faf9f7]/90 backdrop-blur-sm p-4 sm:p-6 mb-6" style={{ boxShadow: 'var(--shadow-xl), var(--shadow-glow)' }}>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col sm:flex-row gap-3">
                 <Input

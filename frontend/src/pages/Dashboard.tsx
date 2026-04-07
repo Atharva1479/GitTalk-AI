@@ -171,8 +171,8 @@ export function Dashboard() {
       <div className="flex-1 relative">
         {/* Background decoration */}
         <div className="fixed inset-0 bg-dots opacity-30 pointer-events-none" />
-        <div className="fixed top-20 -left-32 w-96 h-96 bg-purple-300/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="fixed bottom-20 -right-32 w-96 h-96 bg-blue-300/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="hidden sm:block fixed top-20 -left-32 w-96 h-96 bg-purple-300/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="hidden sm:block fixed bottom-20 -right-32 w-96 h-96 bg-blue-300/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-8 py-8 sm:py-12">
           {/* Welcome header */}
@@ -243,11 +243,11 @@ export function Dashboard() {
                 <Clock className="w-5 h-5 text-foreground/50" />
                 Recent Chats
               </h2>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 max-w-full">
                 {recentChats.map((chat) => (
                   <div
                     key={`${chat.owner}/${chat.repo}`}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-[#faf9f7]/80 hover:bg-[#faf9f7] hover:border-main/30 transition-all duration-200 group"
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-border bg-[#faf9f7]/80 hover:bg-[#faf9f7] hover:border-main/30 transition-all duration-200 group max-w-full overflow-hidden"
                     style={{ boxShadow: 'var(--shadow-sm)' }}
                   >
                     <button
@@ -259,7 +259,7 @@ export function Dashboard() {
                       ) : (
                         <Globe className="w-3.5 h-3.5 text-foreground/40" />
                       )}
-                      <span className="text-sm font-medium group-hover:text-main transition-colors">
+                      <span className="text-sm font-medium group-hover:text-main transition-colors truncate">
                         {chat.owner}/{chat.repo}
                       </span>
                       {chat.messageCount != null && chat.messageCount > 0 && (

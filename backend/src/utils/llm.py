@@ -113,6 +113,46 @@ async def generate_response(prompt: str) -> tuple[str, dict[str, int]]:
             raise
 
 
+async def generate_initial_suggestions(summary: str, tree: str) -> list[str]:
+    """
+    Generate 3 starter questions for a newly processed repository.
+    Uses a lightweight LLM call based on repo summary and structure.
+    """
+    prompt = f"""You are helping a developer explore a GitHub repository they just opened.
+
+REPOSITORY SUMMARY:
+{summary[:2000]}
+
+REPOSITORY STRUCTURE:
+{tree[:2000]}
+
+Based on this repository, generate exactly 3 short starter questions that a developer would likely want to ask first. These should be specific to THIS repo (not generic), covering different aspects like architecture, key features, and how things work.
+
+Return ONLY the 3 questions, one per line, numbered:
+1. ...
+2. ...
+3. ...
+
+Keep each question under 80 characters. Do NOT include any other text."""
+
+    try:
+        response = await asyncio.wait_for(
+            key_manager.llm.ainvoke(prompt),
+            timeout=30,
+        )
+        text = response.content if hasattr(response, "content") else str(response)
+        suggestions = []
+        import re
+        for line in text.strip().splitlines():
+            match = re.match(r"^\d+\.\s*(.+)$", line.strip())
+            if match:
+                suggestions.append(match.group(1).strip())
+        return suggestions[:3]
+    except Exception as e:
+        logging.warning(f"Failed to generate initial suggestions: {e}")
+        return []
+
+
 async def generate_response_stream(prompt: str) -> AsyncGenerator[str, None]:
     """
     Stream response tokens from the LLM.

@@ -19,17 +19,17 @@ export function ChatNavbar({ onNewChat }: ChatNavbarProps) {
 
   return (
     <nav className="sticky top-0 z-50 w-full glass border-b border-border/50" style={{ boxShadow: 'var(--shadow-sm)' }}>
-      <div className="max-w-screen-xl mx-auto px-4 sm:px-8 py-3 sm:py-4">
-        <div className="flex justify-between items-center">
+      <div className="max-w-screen-xl mx-auto px-3 sm:px-8 py-2.5 sm:py-4">
+        <div className="flex justify-between items-center gap-2">
           {/* Logo */}
           <a
             href="/"
             onClick={handleLogoClick}
-            className="text-2xl sm:text-3xl font-bold hover:opacity-90 transition-opacity flex items-center gap-2 shrink-0 max-sm:text-xl max-sm:gap-1.5"
+            className="text-lg sm:text-3xl font-bold hover:opacity-90 transition-opacity flex items-center gap-1.5 sm:gap-2 shrink-0"
           >
             <span className="gradient-text">GitTalk</span>
             <span className="text-foreground">AI</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-main/15 text-main font-semibold">BETA</span>
+            <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded-full bg-main/15 text-main font-semibold">BETA</span>
           </a>
 
           {/* Right side: Auth + New Chat */}
@@ -71,10 +71,10 @@ export function ChatNavbar({ onNewChat }: ChatNavbarProps) {
             )}
 
             <Button
-              className="rounded-full px-6 font-medium flex items-center gap-2 text-sm max-sm:px-3 max-sm:gap-1.5 max-sm:text-xs"
+              className="rounded-full px-3 sm:px-6 font-medium flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm"
               onClick={() => { onNewChat(); navigate(isAuthenticated ? '/dashboard' : '/'); }}
             >
-              <MessageSquarePlus className="h-4 w-4" />
+              <MessageSquarePlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">New Chat</span>
             </Button>
           </div>

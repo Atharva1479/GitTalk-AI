@@ -15,7 +15,7 @@ function ScrollArea({
       className={cn("relative overflow-hidden", className)}
       {...props}
     >
-      <ScrollAreaPrimitive.Viewport className="h-full w-full font-base">
+      <ScrollAreaPrimitive.Viewport className="h-full w-full font-base overflow-x-hidden! [&>div]:!block">
         {children}
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />

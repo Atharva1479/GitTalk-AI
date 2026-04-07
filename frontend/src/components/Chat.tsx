@@ -517,9 +517,9 @@ export function Chat() {
     <div className="min-h-screen w-full flex flex-col relative overflow-hidden" style={{ background: 'linear-gradient(145deg, #f5f3ff 0%, #f3f1ed 30%, #eff6ff 60%, #f3f1ed 100%)' }}>
       {/* Background decoration */}
       <div className="fixed inset-0 bg-dots opacity-30 pointer-events-none" />
-      <div className="fixed top-20 -left-32 w-[30rem] h-[30rem] bg-purple-300/12 rounded-full blur-3xl pointer-events-none animate-float" />
-      <div className="fixed bottom-20 -right-32 w-[28rem] h-[28rem] bg-blue-300/12 rounded-full blur-3xl pointer-events-none animate-float-delayed" />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[35rem] h-[35rem] bg-indigo-200/8 rounded-full blur-3xl pointer-events-none animate-float-slow" />
+      <div className="hidden sm:block fixed top-20 -left-32 w-[30rem] h-[30rem] bg-purple-300/12 rounded-full blur-3xl pointer-events-none animate-float" />
+      <div className="hidden sm:block fixed bottom-20 -right-32 w-[28rem] h-[28rem] bg-blue-300/12 rounded-full blur-3xl pointer-events-none animate-float-delayed" />
+      <div className="hidden sm:block fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[35rem] h-[35rem] bg-indigo-200/8 rounded-full blur-3xl pointer-events-none animate-float-slow" />
 
       <Toaster richColors={false} />
       <ChatNavbar
@@ -562,12 +562,12 @@ export function Chat() {
       )}
 
       {/* Chat Container */}
-      <div className="flex-1 w-full mx-auto max-w-3xl relative z-10 flex flex-col min-h-0">
+      <div className="flex-1 w-full mx-auto max-w-3xl relative z-10 flex flex-col min-h-0 overflow-x-hidden">
         <ScrollArea className="flex-1 h-[calc(100vh-12rem)]" onScrollCapture={handleScroll}>
-          <div className="py-4 px-4 sm:px-8 space-y-5 max-sm:py-3 max-sm:space-y-4">
+          <div className="py-4 px-3 sm:px-8 space-y-5 max-sm:py-3 max-sm:space-y-4 overflow-x-hidden">
             {/* Repository Info */}
             <div className="flex flex-col items-center mb-6 gap-1.5">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#faf9f7]/80 backdrop-blur-sm border border-border/60 shadow-sm max-w-full max-sm:gap-1.5 max-sm:px-3 max-sm:py-1.5">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#faf9f7]/80 backdrop-blur-sm border border-border/60 shadow-sm max-w-[calc(100vw-2rem)] max-sm:gap-1.5 max-sm:px-3 max-sm:py-1.5 overflow-hidden">
                 <svg height="14" viewBox="0 0 16 16" version="1.1" width="14" className="text-foreground/60 shrink-0">
                   <path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
                 </svg>
@@ -625,7 +625,7 @@ export function Chat() {
               message.role === "user" ? (
                 <div key={index} className="flex justify-end">
                   <div
-                    className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm bg-gradient-to-r from-[#7c3aed] to-[#3b82f6] max-sm:max-w-[88%] max-sm:px-3 max-sm:py-2.5"
+                    className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm bg-gradient-to-r from-[#7c3aed] to-[#3b82f6] max-sm:max-w-[92%] max-sm:px-3 max-sm:py-2.5"
                     style={{ boxShadow: '0 4px 15px -3px rgba(124, 58, 237, 0.3)' }}
                   >
                     <p className="text-[14px] sm:text-[15px] text-white break-words max-sm:text-[13px]">{message.content}</p>
@@ -638,10 +638,10 @@ export function Chat() {
                     <Sparkles className="w-3.5 h-3.5 text-main max-sm:w-3 max-sm:h-3" />
                   </div>
                   <div
-                    className="min-w-0 max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm bg-[#faf9f7]/85 backdrop-blur-sm border border-border/60 max-sm:max-w-[calc(100%-2.5rem)] max-sm:px-3 max-sm:py-2.5"
-                    style={{ boxShadow: 'var(--shadow-md)' }}
+                    className="px-4 py-3 rounded-2xl rounded-bl-sm bg-[#faf9f7]/85 backdrop-blur-sm border border-border/60 max-sm:px-3 max-sm:py-2.5"
+                    style={{ boxShadow: 'var(--shadow-md)', maxWidth: 'calc(100% - 2.5rem)' }}
                   >
-                    <div className="wmde-markdown-var overflow-hidden">
+                    <div className="wmde-markdown-var" style={{ maxWidth: '100%', overflowX: 'auto' }}>
                       <MarkdownPreview
                         source={transformMarkdown(message.content)}
                         rehypePlugins={[[rehypeExternalLinks, { target: '_blank', rel: 'noopener noreferrer' }]]}
@@ -649,8 +649,6 @@ export function Chat() {
                           backgroundColor: 'transparent',
                           color: 'inherit',
                           fontSize: 'inherit',
-                          maxWidth: '75ch',
-                          width: '100%',
                         }}
                         className="text-[14px] sm:text-[15px] [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_pre]:p-3 [&_code]:text-sm [&_p]:break-words [&_p]:whitespace-pre-wrap [&_table]:block [&_table]:overflow-x-auto [&_img]:max-w-full max-sm:text-[13px] max-sm:[&_pre]:p-2 max-sm:[&_code]:text-xs"
                         wrapperElement={{
@@ -673,10 +671,10 @@ export function Chat() {
                   <Sparkles className="w-3.5 h-3.5 text-main max-sm:w-3 max-sm:h-3" />
                 </div>
                 <div
-                  className="min-w-0 max-w-[calc(100%-2.5rem)] sm:max-w-[85%] px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl rounded-bl-sm bg-[#faf9f7]/85 backdrop-blur-sm border border-border/60"
-                  style={{ boxShadow: 'var(--shadow-md)' }}
+                  className="px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl rounded-bl-sm bg-[#faf9f7]/85 backdrop-blur-sm border border-border/60"
+                  style={{ boxShadow: 'var(--shadow-md)', maxWidth: 'calc(100% - 2.5rem)' }}
                 >
-                  <div className="wmde-markdown-var overflow-hidden">
+                  <div className="wmde-markdown-var" style={{ maxWidth: '100%', overflowX: 'auto' }}>
                     <MarkdownPreview
                       source={transformMarkdown(streamingContent)}
                       rehypePlugins={[[rehypeExternalLinks, { target: '_blank', rel: 'noopener noreferrer' }]]}
@@ -684,8 +682,6 @@ export function Chat() {
                         backgroundColor: 'transparent',
                         color: 'inherit',
                         fontSize: 'inherit',
-                        maxWidth: '75ch',
-                        width: '100%',
                       }}
                       className="text-[14px] sm:text-[15px] [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_pre]:p-3 [&_code]:text-sm [&_p]:break-words [&_p]:whitespace-pre-wrap [&_table]:block [&_table]:overflow-x-auto [&_img]:max-w-full max-sm:text-[13px] max-sm:[&_pre]:p-2 max-sm:[&_code]:text-xs"
                       wrapperElement={{ 'data-color-mode': 'light' }}
@@ -772,7 +768,7 @@ export function Chat() {
         </div>
 
         {/* Input Area */}
-        <div className="py-3 px-3 sm:px-8 backdrop-blur-md bg-[#f3f1ed]/60">
+        <div className="py-3 px-3 sm:px-8 backdrop-blur-md bg-transparent">
           {/* Mode Buttons */}
           <div className="flex gap-1.5 mb-2 overflow-x-auto pb-0.5 scrollbar-none -mx-1 px-1">
             {([

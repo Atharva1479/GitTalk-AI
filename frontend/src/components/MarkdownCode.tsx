@@ -97,6 +97,27 @@ function cleanMermaidCode(raw: string, aggressive = false): string {
 /**
  * Try to render mermaid code. Returns SVG string on success, null on failure.
  */
+/**
+ * Clean up any mermaid-generated error/orphan elements from the DOM.
+ * Mermaid injects SVGs and error containers directly into document.body on failure.
+ */
+function cleanupMermaidOrphans() {
+  // Remove orphaned mermaid SVG/render elements not inside our containers
+  document.querySelectorAll('[id^="mermaid-"], [id^="dmermaid-"]').forEach(el => {
+    if (!el.closest('[data-name="mermaid"]')) el.remove();
+  });
+  // Remove mermaid error containers (contain "Syntax error in text" or version text)
+  document.querySelectorAll('div, svg').forEach(el => {
+    if (
+      el.parentElement === document.body &&
+      !el.closest('[data-name="mermaid"]') &&
+      el.textContent?.includes('Syntax error in text')
+    ) {
+      el.remove();
+    }
+  });
+}
+
 async function tryRender(code: string): Promise<string | null> {
   ensureMermaidInit();
   try {
@@ -105,12 +126,10 @@ async function tryRender(code: string): Promise<string | null> {
     // Clean up temp element
     const tempEl = document.getElementById(renderId);
     if (tempEl) tempEl.remove();
+    cleanupMermaidOrphans();
     return svg;
   } catch {
-    // Clean up any broken mermaid elements from the DOM
-    document.querySelectorAll('[id^="mermaid-"][id$="-svg"]').forEach(el => {
-      if (!el.closest('[data-name="mermaid"]')) el.remove();
-    });
+    cleanupMermaidOrphans();
     return null;
   }
 }

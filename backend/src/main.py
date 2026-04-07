@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from src.utils.db import init_db, save_conversation, save_message
 from src.utils.cache import load_repo_cache, save_repo_cache, is_repo_indexed, save_chunk_cache, load_chunk_cache
 from src.utils.ingest import ingest_repo, fetch_repo_metadata
-from src.utils.llm import generate_response, generate_response_stream
+from src.utils.llm import generate_response, generate_response_stream, generate_initial_suggestions
 from src.utils.prompt import generate_prompt
 from src.utils.chunker import chunk_repo
 from src.utils.vectorstore import (
@@ -364,6 +364,15 @@ class ConnectionManager:
         # Send confirmation that repo is processed
         await websocket.send_text("repo_processed")
 
+        # Generate and send initial starter questions for the repo
+        try:
+            initial_suggestions = await generate_initial_suggestions(summary, tree)
+            if initial_suggestions:
+                await websocket.send_text(f"suggestions:{json.dumps(initial_suggestions)}")
+        except Exception as e:
+            structured_log(logging.WARNING, "initial_suggestions_failed",
+                request_id=request_id, detail=str(e))
+
     async def disconnect(self, client_id: str) -> None:
         if client_id in self.active_connections:
             try:
@@ -444,17 +453,41 @@ class ConnectionManager:
         try:
             start = time.monotonic()
             full_response = ""
+            MARKER = "---SUGGESTIONS---"
+            buffer = ""  # Buffer to catch marker split across chunks
+
+            marker_found = False
 
             async for chunk in generate_response_stream(prompt):
-                # Stop streaming if we hit the suggestions marker
-                if "---SUGGESTIONS---" in chunk:
-                    before = chunk.split("---SUGGESTIONS---")[0]
-                    full_response += before + "---SUGGESTIONS---" + chunk.split("---SUGGESTIONS---", 1)[1]
+                if marker_found:
+                    # After marker: keep collecting for suggestions, don't stream to client
+                    full_response += chunk
+                    continue
+
+                buffer += chunk
+
+                # Check if marker is fully present in buffer
+                if MARKER in buffer:
+                    before, after = buffer.split(MARKER, 1)
+                    full_response += before + MARKER + after
                     if before:
                         await ws.send_text(f"stream:chunk:{before}")
-                    break
-                full_response += chunk
-                await ws.send_text(f"stream:chunk:{chunk}")
+                    marker_found = True
+                    continue
+
+                # Only stream content we're sure doesn't contain the start of the marker
+                # Keep last len(MARKER)-1 chars in buffer to catch split markers
+                safe_len = len(buffer) - len(MARKER) + 1
+                if safe_len > 0:
+                    safe = buffer[:safe_len]
+                    buffer = buffer[safe_len:]
+                    full_response += safe
+                    await ws.send_text(f"stream:chunk:{safe}")
+
+            # If loop ended without finding marker, flush remaining buffer
+            if not marker_found and buffer:
+                full_response += buffer
+                await ws.send_text(f"stream:chunk:{buffer}")
 
             await ws.send_text("stream:end")
 
