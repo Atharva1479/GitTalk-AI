@@ -4,7 +4,7 @@ interface ExampleRepo {
 }
 
 const EXAMPLE_REPOS: ExampleRepo[] = [
-  { name: "TalkToGithub", url: "https://github.com/Atharva1479/GTA" },
+  { name: "GitTalk-AI", url: "https://github.com/Atharva1479/GitTalk-AI" },
   { name: "GitIngest", url: "https://github.com/cyclotruc/gitingest" },
   { name: "Apple-MCP", url: "https://github.com/Dhravya/apple-mcp" },
   { name: "Bruno", url: "https://github.com/usebruno/bruno" },

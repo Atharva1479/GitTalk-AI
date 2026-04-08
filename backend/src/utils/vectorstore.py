@@ -3,7 +3,7 @@ import logging
 
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec  # type: ignore
-from langchain_google_genai import GoogleGenerativeAIEmbeddings  # type: ignore
+from langchain_community.embeddings import JinaEmbeddings  # type: ignore
 from langchain_pinecone import PineconeVectorStore  # type: ignore
 from langchain_core.documents import Document
 
@@ -11,12 +11,12 @@ load_dotenv()
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "gta-repos")
-EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_MODEL = "jina-embeddings-v3"
 EMBEDDING_DIMENSIONS = 1024
 
 # Singletons
 _pc: Pinecone | None = None
-_embeddings: GoogleGenerativeAIEmbeddings | None = None
+_embeddings: JinaEmbeddings | None = None
 
 
 def _get_pinecone() -> Pinecone:
@@ -26,13 +26,12 @@ def _get_pinecone() -> Pinecone:
     return _pc
 
 
-def _get_embeddings() -> GoogleGenerativeAIEmbeddings:
+def _get_embeddings() -> JinaEmbeddings:
     global _embeddings
     if _embeddings is None:
-        _embeddings = GoogleGenerativeAIEmbeddings(
-            model=EMBEDDING_MODEL,
-            google_api_key=os.getenv("GEMINI_API_KEY", ""),
-            output_dimensionality=EMBEDDING_DIMENSIONS,
+        _embeddings = JinaEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            jina_api_key=os.getenv("JINA_API_KEY", ""),
         )
     return _embeddings
 

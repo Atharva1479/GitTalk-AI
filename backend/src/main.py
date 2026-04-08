@@ -108,7 +108,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://git-talk-ai.vercel.app"] if IS_PROD else ["*"],
+    allow_origins=["https://git-talk-ai.vercel.app"] if IS_PROD else ["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -581,6 +581,10 @@ class ConnectionManager:
         except Exception as e:
             structured_log(logging.WARNING, "initial_suggestions_failed",
                 request_id=request_id, detail=str(e))
+            # Reset key manager if exhausted, so user queries still work
+            if "RESOURCE_EXHAUSTED" in str(e) or "OUT_OF_KEYS" in str(e):
+                from src.utils.llm import key_manager
+                key_manager.reset()
 
     async def disconnect(self, client_id: str) -> None:
         if client_id in self.active_connections:
@@ -751,9 +755,13 @@ class ConnectionManager:
                     request_id=rid, error_type="value_error", detail=str(e))
                 await ws.send_text("error:generation_failed")
         except Exception as e:
+            error_str = str(e)
             structured_log(logging.ERROR, "query_error",
-                request_id=rid, error_type="unexpected", detail=str(e))
-            await ws.send_text("error:generation_failed")
+                request_id=rid, error_type="unexpected", detail=error_str)
+            if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str or "quota" in error_str.lower():
+                await ws.send_text("error:keys_exhausted")
+            else:
+                await ws.send_text("error:generation_failed")
 
 
 manager = ConnectionManager()

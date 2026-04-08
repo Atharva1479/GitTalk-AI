@@ -153,9 +153,9 @@ Keep each question under 80 characters. Do NOT include any other text."""
         return []
 
 
-async def generate_response_stream(prompt: str) -> AsyncGenerator[str, None]:
+async def generate_response_stream(prompt: str, max_retries: int = 2) -> AsyncGenerator[str, None]:
     """
-    Stream response tokens from the LLM.
+    Stream response tokens from the LLM with retry logic for transient errors.
 
     Yields:
         Individual text chunks as they are generated.
@@ -164,6 +164,7 @@ async def generate_response_stream(prompt: str) -> AsyncGenerator[str, None]:
         ValueError: If all API keys have been exhausted.
         TimeoutError: If first chunk takes too long.
     """
+    retries = 0
     while True:
         try:
             first_chunk = True
@@ -175,12 +176,23 @@ async def generate_response_stream(prompt: str) -> AsyncGenerator[str, None]:
                     yield text
             return
         except Exception as e:
-            if "RESOURCE_EXHAUSTED" in str(e):
+            error_str = str(e)
+            # Handle rate limits — rotate API keys
+            if "RESOURCE_EXHAUSTED" in error_str:
                 next_key = key_manager.get_next_key()
                 if next_key is None:
                     key_manager.reset()
                     raise ValueError(
                         "OUT_OF_KEYS: All available API keys have been exhausted"
                     )
+                continue
+            # Handle transient aiohttp/API errors — retry with backoff
+            if ("ClientResponse" in error_str or "subscriptable" in error_str
+                    or "ServerDisconnectedError" in error_str or "429" in error_str):
+                retries += 1
+                if retries > max_retries:
+                    raise
+                logging.warning(f"Transient LLM error (attempt {retries}/{max_retries}): {error_str[:100]}")
+                await asyncio.sleep(retries * 2)
                 continue
             raise

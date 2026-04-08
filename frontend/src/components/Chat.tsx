@@ -2,7 +2,7 @@ import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
 import { ScrollArea } from "./ui/scroll-area"
 import { useNavigate, useParams } from "react-router-dom"
-import { SendHorizontal, Sparkles, Share2, Copy, Link2, Star, RefreshCw, Search, Bug, Wrench, Shield, FileText } from "lucide-react"
+import { SendHorizontal, Sparkles, Share2, Copy, Link2, Star, RefreshCw, Search, Bug, Wrench, Shield, FileText, Pencil, Check, X } from "lucide-react"
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useWebSocket } from "../context/WebSocketContext"
 import { useAuth } from "../context/AuthContext"
@@ -74,6 +74,8 @@ export function Chat() {
   const [connectionError, setConnectionError] = useState<string>("")
   const [showShareMenu, setShowShareMenu] = useState(false)
   const [isSharedView, setIsSharedView] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editValue, setEditValue] = useState("")
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const connectionAttemptedRef = useRef(false)
   const welcomeMessageShownRef = useRef(messages.length > 0)
@@ -304,7 +306,7 @@ export function Chat() {
   useEffect(() => {
     if (errorMessage) {
       toast.error(errorMessage, {
-        position: "bottom-right",
+        position: "top-center",
         duration: 5000,
       });
       setIsLoading(false);
@@ -702,13 +704,114 @@ export function Chat() {
             {/* Message List */}
             {messages.map((message, index) => (
               message.role === "user" ? (
-                <div key={index} className="flex justify-end">
-                  <div
-                    className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm bg-gradient-to-r from-[#7c3aed] to-[#3b82f6] max-sm:max-w-[92%] max-sm:px-3 max-sm:py-2.5"
-                    style={{ boxShadow: '0 4px 15px -3px rgba(124, 58, 237, 0.3)' }}
-                  >
-                    <p className="text-[14px] sm:text-[15px] text-white break-words max-sm:text-[13px]">{message.content}</p>
-                  </div>
+                <div key={index} className="flex flex-col items-end gap-1">
+                  {editingIndex === index ? (
+                    /* Inline edit mode */
+                    <div className="w-full max-w-[85%] max-sm:max-w-[92%] flex flex-col gap-2">
+                      <textarea
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            if (!editValue.trim()) return
+                            // Truncate messages from this point and send edited version
+                            setMessages(prev => {
+                              const truncated = prev.slice(0, index)
+                              persistMessages(truncated)
+                              return truncated
+                            })
+                            const edited = editValue.trim().slice(0, 10_000)
+                            addMessage(edited, 'user')
+                            setIsLoading(true)
+                            sendMessage(edited)
+                            setEditingIndex(null)
+                          }
+                          if (e.key === 'Escape') setEditingIndex(null)
+                        }}
+                        className="w-full text-[14px] px-4 py-3 rounded-2xl border-2 border-main/40 bg-[#faf9f7] resize-none focus:outline-none focus:border-main/60 max-sm:text-[13px] max-sm:px-3 max-sm:py-2.5"
+                        rows={Math.min(editValue.split('\n').length + 1, 6)}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setEditingIndex(null)}
+                          className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs text-foreground/50 hover:text-foreground/70 hover:bg-foreground/5 transition-colors"
+                        >
+                          <X className="w-3 h-3" /> Cancel
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!editValue.trim()) return
+                            setMessages(prev => {
+                              const truncated = prev.slice(0, index)
+                              persistMessages(truncated)
+                              return truncated
+                            })
+                            const edited = editValue.trim().slice(0, 10_000)
+                            addMessage(edited, 'user')
+                            setIsLoading(true)
+                            sendMessage(edited)
+                            setEditingIndex(null)
+                          }}
+                          className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs bg-gradient-to-r from-[#7c3aed] to-[#3b82f6] text-white hover:opacity-90 transition-opacity"
+                        >
+                          <Check className="w-3 h-3" /> Send
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Normal display mode */
+                    <>
+                      <div
+                        className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm bg-gradient-to-r from-[#7c3aed] to-[#3b82f6] max-sm:max-w-[92%] max-sm:px-3 max-sm:py-2.5"
+                        style={{ boxShadow: '0 4px 15px -3px rgba(124, 58, 237, 0.3)' }}
+                      >
+                        <p className="text-[14px] sm:text-[15px] text-white break-words max-sm:text-[13px]">{message.content}</p>
+                      </div>
+                      {/* Edit + Rerun — only on the last user message */}
+                      {!isLoading && !isStreaming && isConnected && !isSharedView &&
+                       (index === messages.length - 1 || (index === messages.length - 2 && messages[messages.length - 1]?.role === 'assistant')) && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingIndex(index)
+                              setEditValue(message.content.replace(/^\[.+?\]\s*/, ''))
+                            }}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] text-foreground/30 hover:text-foreground/55 transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              const raw = message.content.replace(/^\[.+?\]\s*/, '')
+                              // Remove everything from this user message onward, then re-add and re-send
+                              setMessages(prev => {
+                                const truncated = prev.slice(0, index)
+                                persistMessages(truncated)
+                                return truncated
+                              })
+                              // Use setTimeout to let state update before re-adding
+                              setTimeout(() => {
+                                addMessage(message.content, 'user')
+                                setIsLoading(true)
+                                const modeMatch = message.content.match(/^\[(\w+)\s+Mode\]/)
+                                const wireMessage = modeMatch
+                                  ? `[MODE:${modeMatch[1].toLowerCase()}] ${raw}`
+                                  : raw
+                                sendMessage(wireMessage)
+                              }, 50)
+                            }}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] text-foreground/30 hover:text-foreground/55 transition-colors"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Rerun
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div key={index} className="flex gap-2.5 max-sm:gap-2 group/msg">
@@ -738,21 +841,19 @@ export function Chat() {
                         }}
                       />
                     </div>
-                    {/* Copy answer button — bottom right inside bubble, hidden for mermaid diagrams */}
-                    {!message.content.includes('```mermaid') && (
-                      <div className="flex justify-end mt-1.5 -mb-1">
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(stripSuggestions(message.content))
-                            toast.success('Copied!', { position: 'bottom-right', duration: 1500 })
-                          }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground/35 hover:text-foreground/60 hover:bg-foreground/5 transition-all"
-                        >
-                          <Copy className="w-3 h-3" />
-                          Copy
-                        </button>
-                      </div>
-                    )}
+                    {/* Copy answer button */}
+                    <div className="flex justify-end mt-1.5 -mb-1">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(stripSuggestions(message.content))
+                          toast.success('Copied!', { position: 'bottom-right', duration: 1500 })
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-foreground/35 hover:text-foreground/60 hover:bg-foreground/5 transition-all"
+                      >
+                        <Copy className="w-3 h-3" />
+                        Copy
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
