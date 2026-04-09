@@ -664,7 +664,7 @@ class ConnectionManager:
             bm25_results = bm25_search(retrieval_query, all_documents, top_k=top_k)
             merged = reciprocal_rank_fusion(vector_results, bm25_results, top_n=top_k)
 
-            reranked = rerank(query, merged, top_n=rerank_top_n)
+            reranked = await rerank(query, merged, top_n=rerank_top_n)
             reranked = cap_chunks_by_token_budget(reranked)
         except Exception as e:
             structured_log(logging.ERROR, "retrieval_error",

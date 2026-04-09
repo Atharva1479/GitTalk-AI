@@ -69,7 +69,7 @@ Instead of spending hours reading through unfamiliar codebases, tracing code pat
 
 **Hybrid RAG Pipeline**
 
-Vector search (Pinecone + Jina AI) combined with BM25 keyword search, merged via Reciprocal Rank Fusion, reranked by FlashRank
+Vector search (Pinecone + Jina AI) combined with BM25 keyword search, merged via Reciprocal Rank Fusion, reranked by Jina Reranker
 
 </td>
 <td align="center" width="33%">
@@ -167,7 +167,7 @@ User Query
     ├── 6.  BM25 keyword search ───────────────────┤
     │                                               │
     ├── 7.  Reciprocal Rank Fusion (merge) ◄────────┘
-    ├── 8.  FlashRank cross-encoder reranking
+    ├── 8.  Jina AI Reranker (API-based reranking)
     ├── 9.  Token budget cap (400K chars)
     │
     ├── 10. Load long-term memory context
@@ -186,7 +186,7 @@ User Query
 <tr><td>LLM</td><td><img src="https://img.shields.io/badge/-Gemini%202.5%20Flash-4285F4?style=flat-square&logo=google&logoColor=white"/> (streaming + key rotation)</td></tr>
 <tr><td>Embeddings</td><td><img src="https://img.shields.io/badge/-Jina%20AI%20v3-FF6F00?style=flat-square"/> (1024d, code-optimized)</td></tr>
 <tr><td>Vector DB</td><td><img src="https://img.shields.io/badge/-Pinecone-000?style=flat-square&logo=pinecone&logoColor=white"/> (serverless)</td></tr>
-<tr><td>Search</td><td>BM25 + Reciprocal Rank Fusion + FlashRank reranking</td></tr>
+<tr><td>Search</td><td>BM25 + Reciprocal Rank Fusion + Jina Reranker reranking</td></tr>
 <tr><td>Auth</td><td><img src="https://img.shields.io/badge/-GitHub%20OAuth-181717?style=flat-square&logo=github&logoColor=white"/> + httpOnly cookies + CSRF</td></tr>
 <tr><td>Database</td><td><img src="https://img.shields.io/badge/-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white"/> (async) — conversations, memory, users</td></tr>
 <tr><td>Deploy</td><td><img src="https://img.shields.io/badge/-Vercel-000?style=flat-square&logo=vercel&logoColor=white"/> (frontend) + <img src="https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white"/> (backend)</td></tr>
@@ -368,7 +368,7 @@ backend/
 │       ├── query_classifier.py # Query type detection + augmentation
 │       ├── query_enrichment.py # History-aware query enrichment
 │       ├── rate_limit.py       # Per-IP sliding window limiter
-│       ├── reranker.py         # FlashRank cross-encoder
+│       ├── reranker.py         # Jina AI Reranker API
 │       ├── session.py          # JWT sessions + CSRF protection
 │       └── vectorstore.py      # Pinecone + Jina AI operations
 ├── .env.example
