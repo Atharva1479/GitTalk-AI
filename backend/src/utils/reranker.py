@@ -3,7 +3,7 @@ import logging
 from flashrank import Ranker, RerankRequest  # type: ignore
 from langchain_core.documents import Document
 
-FLASHRANK_MODEL = "ms-marco-MiniLM-L-12-v2"
+FLASHRANK_MODEL = "ms-marco-MiniLM-L-6-v2"
 FLASHRANK_CACHE_DIR = "/tmp/flashrank_cache"
 
 _ranker: Ranker | None = None
